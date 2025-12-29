@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
-    res.send('✅ MarginUp Proxy Sunucusu Aktif! (DigitalOcean)');
+    res.send('✅ MarginUp Proxy Sunucusu Aktif! (v2.0)');
 });
 
 app.post('/trendyol-proxy', async (req, res) => {
@@ -22,15 +22,28 @@ app.post('/trendyol-proxy', async (req, res) => {
             body: body ? JSON.stringify(body) : undefined
         });
 
-        const data = await response.json();
-        res.json(data);
+        // ÖNCE cevabı düz yazı (text) olarak alıyoruz
+        const responseText = await response.text();
+
+        // ŞİMDİ JSON'a çevirmeyi deniyoruz
+        try {
+            const data = JSON.parse(responseText);
+            res.json(data); // JSON ise gönder
+        } catch (jsonError) {
+            // JSON değilse (HTML ise) hatayı olduğu gibi gönder ki görelim
+            console.error("Trendyol HTML Döndü:", responseText);
+            res.status(response.status || 500).send(responseText);
+        }
 
     } catch (error) {
-        console.error("Hata:", error.message);
+        console.error("Sunucu Hatası:", error.message);
         res.status(500).json({ error: error.message });
     }
 });
 
+app.listen(PORT, () => {
+    console.log(`Sunucu ${PORT} portunda çalışıyor.`);
+});
 app.listen(PORT, () => {
     console.log(`Sunucu ${PORT} portunda çalışıyor.`);
 });
