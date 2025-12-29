@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
+const axios = require('axios');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -8,55 +8,53 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// 1. Ana Sayfa
+// Test endpoint
 app.get('/', (req, res) => {
-    res.send('✅ Sunucu Aktif (V6 - Anti-Cloudflare Mode)');
+    res.send('✅ Sunucu Aktif (Trendyol Resmi API)');
 });
 
-// 2. Trendyol Proxy (Kılık Değiştirmiş Versiyon)
-app.post('/trendyol-proxy', async (req, res) => {
+// Trendyol bağlantı testi
+app.post('/trendyol/test', async (req, res) => {
+    const { sellerId, apiKey, apiSecret } = req.body;
+
+    // 1️⃣ Basic Auth oluştur
+    const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+
     try {
-        const { url, method, headers, body } = req.body;
-        console.log(`🕵️‍♂️ Gizli İstek Gönderiliyor: ${url}`);
+        // 2️⃣ Resmi Trendyol API çağrısı
+        const response = await axios.get(
+            `https://api.trendyol.com/sapigw/suppliers/${sellerId}/products`,
+            {
+                params: { size: 1 },
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'User-Agent': 'YourStartupName/1.0',
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                timeout: 10000
+            }
+        );
 
-        // BURASI ÇOK ÖNEMLİ: Kendimizi Chrome gibi tanıtıyoruz
-        const fakeHeaders = {
-            ...headers, // Senin gönderdiğin şifreler (Authorization)
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json',
-            'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
-        };
-
-        const response = await fetch(url, {
-            method: method || 'GET',
-            headers: fakeHeaders,
-            body: body ? JSON.stringify(body) : undefined
+        // 3️⃣ Başarılıysa
+        res.json({
+            success: true,
+            message: '🎉 Trendyol bağlantısı başarılı',
+            sampleProduct: response.data?.content?.[0] || null
         });
 
-        const responseText = await response.text();
+    } catch (err) {
+        // 4️⃣ Hata varsa
+        console.error('❌ Trendyol API Hatası:', err.response?.data || err.message);
 
-        // Cloudflare engelini kontrol et
-        if (responseText.includes('Cloudflare') || responseText.includes('blocked')) {
-            console.log("❌ Cloudflare yine yakaladı!");
-            return res.status(403).json({ error: "Cloudflare engeli! IP adresi şüpheli bulundu." });
-        }
-
-        try {
-            const data = JSON.parse(responseText);
-            res.status(response.status).json(data);
-        } catch (err) {
-            console.log("⚠️ HTML Geldi:", responseText.substring(0, 100) + "...");
-            res.status(response.status).send(responseText);
-        }
-
-    } catch (error) {
-        console.error("Sunucu Hatası:", error.message);
-        res.status(500).json({ error: error.message });
+        res.status(400).json({
+            success: false,
+            message: 'Trendyol bağlantı hatası',
+            detail: err.response?.data || err.message
+        });
     }
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Sunucu ${PORT} portunda gizlendi.`);
+    console.log(`🚀 Server ${PORT} portunda çalışıyor`);
 });
