@@ -1,6 +1,8 @@
+const https = require('https');
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -8,49 +10,70 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(express.json());
 
-// Test endpoint
+// Ana test endpoint
 app.get('/', (req, res) => {
-    res.send('✅ Sunucu Aktif (Trendyol Resmi API)');
+    res.send('✅ Sunucu Aktif (Trendyol Resmi API + Cloudflare Fix)');
 });
 
-// Trendyol bağlantı testi
+// Trendyol bağlantı test endpointi
 app.post('/trendyol/test', async (req, res) => {
     const { sellerId, apiKey, apiSecret } = req.body;
 
-    // 1️⃣ Basic Auth oluştur
+    if (!sellerId || !apiKey || !apiSecret) {
+        return res.status(400).json({
+            success: false,
+            message: 'sellerId, apiKey ve apiSecret zorunludur'
+        });
+    }
+
+    // Basic Auth oluştur
     const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
 
+    // Cloudflare için SNI fix
+    const httpsAgent = new https.Agent({
+        servername: 'api.trendyol.com'
+    });
+
     try {
-        // 2️⃣ Resmi Trendyol API çağrısı
         const response = await axios.get(
             `https://api.trendyol.com/sapigw/suppliers/${sellerId}/products`,
             {
                 params: { size: 1 },
                 headers: {
                     'Authorization': `Basic ${auth}`,
-                    'User-Agent': 'YourStartupName/1.0',
+                    'User-Agent': 'MarginUP/1.0',
                     'Accept': 'application/json',
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Host': 'api.trendyol.com'
                 },
+                httpsAgent,
                 timeout: 10000
             }
         );
 
-        // 3️⃣ Başarılıysa
-        res.json({
+        return res.json({
             success: true,
             message: '🎉 Trendyol bağlantısı başarılı',
             sampleProduct: response.data?.content?.[0] || null
         });
 
     } catch (err) {
-        // 4️⃣ Hata varsa
-        console.error('❌ Trendyol API Hatası:', err.response?.data || err.message);
+        console.error('❌ Trendyol API Hatası:');
 
-        res.status(400).json({
+        if (err.response) {
+            console.error(err.response.data);
+            return res.status(err.response.status).json({
+                success: false,
+                message: 'Trendyol API hata döndü',
+                detail: err.response.data
+            });
+        }
+
+        console.error(err.message);
+        return res.status(500).json({
             success: false,
-            message: 'Trendyol bağlantı hatası',
-            detail: err.response?.data || err.message
+            message: 'Sunucu hatası',
+            detail: err.message
         });
     }
 });
